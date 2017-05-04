@@ -30,10 +30,11 @@ class ConnectEvent(wx.PyEvent):
 
 class WorkerThread(Thread):
 
-	def __init__(self, notify_window):
+	def __init__(self, notify_window, port_connected):
 		Thread.__init__(self)
 
 		self._notify_window = notify_window
+		self._port_connected = port_connected 
 
 		self.start()
 
@@ -52,15 +53,17 @@ class WorkerThread(Thread):
 
 			baud = 9600;
 
-			for port in self.available:
-				print("Available ports: " + str(port))
-				wx.PostEvent(self._notify_window, ConnectEvent(port))
+			if not self._port_connected:
+				for port in self.available:
+					print("Available ports: " + str(port))
+					wx.PostEvent(self._notify_window, ConnectEvent(port))
 		
-				try:
-					self.elm = serial.Serial(port, parity = serial.PARITY_NONE, stopbits = 1, bytesize = 8, timeout = 1)
-					print(self.elm.is_open)
-				except serial.SerialException as e:
-					print(e)
+					try:
+						self.elm = serial.Serial(port, parity = serial.PARITY_NONE, stopbits = 1, bytesize = 8, timeout = 1)
+						print(self.elm.is_open)
+						self._port_connected = True
+					except serial.SerialException as e:
+						print(e)
 
 			try: 
 				if self.elm:
@@ -74,24 +77,28 @@ class WorkerThread(Thread):
 								
 
 					#linefeed on
-					#self.elm.write(b"ATL1\r\n")
+					self.elm.write(b"ATL1\r\n")
 					#x = self.elm.readline()
-					#x = self.read_cmd()
-					#print(x)
+					x = self.read_cmd()
+					print(x)
+					oldData = 0
 
 					self.send_command("010C")
 					#self.send_command("010D")
-					if 1:
+					while 1:
 						time.sleep(.1)
-						#self.send_command("")
+						self.send_command("")
 						data = self.read_cmd()
-						data = self.interpret(x)
+						newData = self.interpret(data)
 						#x = self.getRPM(x)
-						#print(x)
-						if data != "None" or data != "":
-							wx.PostEvent(self._notify_window, ResultEvent(data))
+						print(newData)
+
+						
+						if data != "None" or data != "" or data != " ":
+							oldData = newData
+							wx.PostEvent(self._notify_window, ResultEvent(newData))
 						else:
-							wx.PostEvent(self._notify_window, ResultEvent(None))
+							wx.PostEvent(self._notify_window, ResultEvent(oldData))
 
 			except serial.SerialException as e:
 				print(e)
@@ -178,22 +185,23 @@ class Frame(wx.Frame):
 
 		wx.Frame.__init__(self, parent, id, "OBD Reader")
 		self.status = wx.StaticText(self, -1, '', pos=(0,100))
+		self.rpm = wx.StaticText(self, -1,'', pos = (0, 150))
 
 		EVT_RESULT(self, self.onResult)
 		EVT_CONNECT(self, self.onConnect)
 
-		self.worker = WorkerThread(self)
+		self.worker = WorkerThread(self, False)
 
 
 	def onResult(self, event):
 
 		if event.data is None:
-			self.status.SetLabel("RETRIEVING...")
+			self.rpm.SetLabel("RETRIEVING...")
 		else:
-			self.status.SetLabel("RPM: %s" % event.data )
+			self.rpm.SetLabel("RPM: %s" % event.data )
 
-		self.worker = None #change later to create new thread again
-		self.worker = WorkerThread(self)  #restarting thread to get rpm again
+		#self.worker = None #change later to create new thread again
+		#self.worker = WorkerThread(self)  #restarting thread to get rpm again
 
 
 
@@ -204,7 +212,7 @@ class Frame(wx.Frame):
 		else:
 			self.status.SetLabel("Port connected: %s" % event.data )
 
-		#self.worker = None #change later to create new thread again
+		#self.worker = WorkerThread(self, True) #change later to create new thread again
 
 
 class myApp(wx.App):
