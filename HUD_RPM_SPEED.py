@@ -99,13 +99,19 @@ class WorkerThread(Thread):
 
 					#rpm command 
 					if self._which_worker = "rpm_worker":
-						self.send_command("010C")
+						serialLock.acquire()
+						 self.send_command("010C")
+						 serialLock.release()
 					else:
+						serialLock.acquire()
 						self.send_command("010D")
+						serialLock.release()
 
 					while 1:
 						time.sleep(.1)
+						serialLock.acquire()
 						self.send_command("")
+						serialLock.release()
 						data = self.read_cmd()
 						newData = self.interpret(data)
 						#x = self.getRPM(x)
